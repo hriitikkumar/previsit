@@ -1,0 +1,290 @@
+from __future__ import annotations
+
+import hmac
+import os
+import sys
+
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# project root on path so sub-modules resolve cleanly
+sys.path.insert(0, os.path.dirname(__file__))
+
+from agents.conversation import build_system_prompt
+from agents.extraction import extract_summary
+from agents.reflexion import get_reflexion_notes, run_reflexion
+from db.database import Database
+from models.schemas import AppointmentCreate, PatientCreate
+from seed_data.seed import create_test_patients
+from services.rag_service import get_patient_context
+from services.vapi_service import trigger_call
+
+app = FastAPI(title="PreVisit", version="0.1.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+db = Database()
+
+VAPI_WEBHOOK_SECRET = os.environ.get("VAPI_WEBHOOK_SECRET", "")
+
+
+@app.on_event("startup")
+async def startup():
+    db.init_schema()
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _verify_vapi_secret(secret_header: str | None):
+    """
+    Vapi echoes the assistant's `server.secret` back as the plaintext
+    `x-vapi-secret` header on every webhook. Reject anything that doesn't match.
+    """
+    if not VAPI_WEBHOOK_SECRET:
+        return  # secret not configured — skip verification (dev mode)
+    if not secret_header or not hmac.compare_digest(secret_header, VAPI_WEBHOOK_SECRET):
+        raise HTTPException(status_code=401, detail="Invalid or missing x-vapi-secret header")
+
+
+async def _process_completed_call(call_log_id: str, transcript: str):
+    """Run extraction + reflexion after a call ends. Used by both real and mock paths."""
+    summary = extract_summary(transcript)
+    db.save_pre_visit_summary(call_log_id, summary)
+
+    reflexion = run_reflexion(transcript, summary.dict())
+    db.save_reflexion(call_log_id, reflexion)
+
+    print(f"[previsit] Call {call_log_id} processed — score {reflexion['overall_score']}/10")
+    print(f"[previsit] Key learning: {reflexion['key_learning']}")
+
+
+# ── Trigger a real Vapi call ──────────────────────────────────────────────────
+
+@app.post("/call/trigger/{appointment_id}")
+async def trigger_pre_visit_call(appointment_id: str):
+    appointment = db.get_appointment(appointment_id)
+    if not appointment:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+
+    patient = db.get_patient(appointment["patient_id"])
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    patient_history = get_patient_context(str(patient["id"]))
+    reflexion_notes = get_reflexion_notes(db)
+
+    system_prompt = build_system_prompt(
+        patient_data=patient,
+        appointment_data=appointment,
+        patient_history=patient_history,
+        reflexion_notes=reflexion_notes,
+    )
+
+    try:
+        call_response = trigger_call(
+            patient_phone=patient["phone"],
+            patient_name=patient["name"],
+            system_prompt=system_prompt,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    call_log_id = db.create_call_log(
+        appointment_id=appointment_id,
+        patient_id=str(patient["id"]),
+        vapi_call_id=call_response["id"],
+    )
+
+    return {
+        "status": "call_triggered",
+        "vapi_call_id": call_response["id"],
+        "call_log_id": call_log_id,
+    }
+
+
+# ── Vapi webhook (real calls) ─────────────────────────────────────────────────
+
+@app.post("/webhook/vapi")
+async def handle_vapi_webhook(request: Request, background_tasks: BackgroundTasks):
+    _verify_vapi_secret(request.headers.get("x-vapi-secret"))
+
+    payload = await request.json()
+    message = payload.get("message", {})
+
+    if message.get("type") != "end-of-call-report":
+        return {"status": "ignored"}
+
+    call_id = message["call"]["id"]
+    transcript = message.get("transcript") or message.get("artifact", {}).get("transcript", "")
+
+    call_log = db.update_call_log(
+        vapi_call_id=call_id,
+        transcript=transcript,
+        status="completed",
+    )
+
+    background_tasks.add_task(
+        _process_completed_call,
+        call_log_id=str(call_log["id"]),
+        transcript=transcript,
+    )
+
+    return {"status": "processing"}
+
+
+# ── Mock endpoint — test post-call pipeline without Vapi ─────────────────────
+
+class MockCallComplete(BaseModel):
+    appointment_id: str
+    transcript: str
+
+
+@app.post("/mock/call-complete")
+async def mock_call_complete(body: MockCallComplete, background_tasks: BackgroundTasks):
+    """
+    Submit a transcript directly and run the full post-call pipeline
+    (extraction + reflexion). No Vapi needed — use this for local testing.
+    """
+    appointment = db.get_appointment(body.appointment_id)
+    if not appointment:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+
+    call_log_id = db.create_call_log(
+        appointment_id=body.appointment_id,
+        patient_id=str(appointment["patient_id"]),
+        vapi_call_id=None,
+    )
+    db.update_call_log_by_id(
+        call_log_id=call_log_id,
+        transcript=body.transcript,
+        status="mock_completed",
+    )
+
+    background_tasks.add_task(
+        _process_completed_call,
+        call_log_id=call_log_id,
+        transcript=body.transcript,
+    )
+
+    return {
+        "status": "processing",
+        "call_log_id": call_log_id,
+        "message": "Extraction and reflexion running in background.",
+    }
+
+
+# ── Preview the DSPy-generated system prompt ─────────────────────────────────
+
+@app.get("/call/preview/{appointment_id}")
+async def preview_system_prompt(appointment_id: str):
+    """Returns the DSPy-generated system prompt without placing a call."""
+    appointment = db.get_appointment(appointment_id)
+    if not appointment:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+
+    patient = db.get_patient(appointment["patient_id"])
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    patient_history = get_patient_context(str(patient["id"]))
+    reflexion_notes = get_reflexion_notes(db)
+
+    prompt = build_system_prompt(
+        patient_data=patient,
+        appointment_data=appointment,
+        patient_history=patient_history,
+        reflexion_notes=reflexion_notes,
+    )
+
+    return {
+        "patient_name": patient["name"],
+        "reflexion_notes": reflexion_notes,
+        "system_prompt": prompt,
+    }
+
+
+# ── Patients ──────────────────────────────────────────────────────────────────
+
+@app.get("/patients")
+async def list_patients():
+    return db.get_all_patients()
+
+
+@app.post("/patients")
+async def create_patient(body: PatientCreate):
+    patient_id = db.create_patient(body.dict())
+    return db.get_patient(patient_id)
+
+
+# ── Appointments ──────────────────────────────────────────────────────────────
+
+@app.get("/appointments")
+async def list_appointments():
+    return db.get_all_appointments()
+
+
+@app.post("/appointments")
+async def create_appointment(body: AppointmentCreate):
+    patient = db.get_patient(body.patient_id)
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    appointment_id = db.create_appointment(body.dict())
+    return db.get_appointment(appointment_id)
+
+
+class AppointmentStatusUpdate(BaseModel):
+    status: str
+
+
+@app.patch("/appointments/{appointment_id}/status")
+async def update_appointment_status(appointment_id: str, body: AppointmentStatusUpdate):
+    appointment = db.update_appointment_status(appointment_id, body.status)
+    if not appointment:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+    return appointment
+
+
+# ── Call logs ─────────────────────────────────────────────────────────────────
+
+@app.get("/call-logs/{call_log_id}")
+async def get_call_log(call_log_id: str):
+    call_log = db.get_call_log(call_log_id)
+    if not call_log:
+        raise HTTPException(status_code=404, detail="Call log not found")
+    return call_log
+
+
+# ── Doctor's morning dashboard ────────────────────────────────────────────────
+
+@app.get("/dashboard/{date}")
+async def get_daily_summaries(date: str):
+    summaries = db.get_summaries_for_date(date)
+    return {
+        "date": date,
+        "total_appointments": len(summaries),
+        "confirmed": sum(1 for s in summaries if s.get("appointment_confirmed")),
+        "urgent_flags": [s for s in summaries if s.get("urgent_flags")],
+        "summaries": summaries,
+    }
+
+
+# ── Seed test data ────────────────────────────────────────────────────────────
+
+@app.post("/seed")
+async def seed():
+    created = create_test_patients(db)
+    return {"status": "seeded", "created": created}
+
+
+# ── Health check ──────────────────────────────────────────────────────────────
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
