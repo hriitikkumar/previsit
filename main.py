@@ -21,7 +21,7 @@ from db.database import Database
 from models.schemas import AppointmentCreate, PatientCreate
 from seed_data.seed import create_test_patients
 from services.rag_service import get_patient_context
-from services.vapi_service import trigger_call
+from services.vapi_service import VAPI_PUBLIC_KEY, build_web_call_config, trigger_call
 
 app = FastAPI(title="PreVisit", version="0.1.0")
 
@@ -107,6 +107,93 @@ async def trigger_pre_visit_call(appointment_id: str):
         "status": "call_triggered",
         "vapi_call_id": call_response["id"],
         "call_log_id": call_log_id,
+    }
+
+
+# ── Browser-based Vapi Web SDK call (visitor plays the patient) ──────────────
+
+@app.post("/call/web/start/{appointment_id}")
+async def start_web_call(appointment_id: str):
+    """
+    Returns everything the frontend needs to start a live in-browser voice
+    call via Vapi's Web SDK: the public key, a fully-built assistant config
+    (DSPy system prompt + RAG history + reflexion notes baked in), and a
+    call_log_id to track it. The browser starts the call itself — Vapi
+    generates the call id client-side, so the frontend must POST it back via
+    /call-logs/{call_log_id}/link once the call starts.
+    """
+    if not VAPI_PUBLIC_KEY:
+        raise HTTPException(status_code=400, detail="VAPI_PUBLIC_KEY not configured")
+
+    appointment = db.get_appointment(appointment_id)
+    if not appointment:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+
+    patient = db.get_patient(appointment["patient_id"])
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    patient_history = get_patient_context(str(patient["id"]))
+    reflexion_notes = get_reflexion_notes(db)
+
+    system_prompt = build_system_prompt(
+        patient_data=patient,
+        appointment_data=appointment,
+        patient_history=patient_history,
+        reflexion_notes=reflexion_notes,
+    )
+
+    assistant_config = build_web_call_config(
+        patient_name=patient["name"],
+        system_prompt=system_prompt,
+    )
+
+    call_log_id = db.create_call_log(
+        appointment_id=appointment_id,
+        patient_id=str(patient["id"]),
+        vapi_call_id=None,
+    )
+
+    return {
+        "call_log_id": call_log_id,
+        "public_key": VAPI_PUBLIC_KEY,
+        "assistant_config": assistant_config,
+    }
+
+
+class LinkVapiCall(BaseModel):
+    vapi_call_id: str
+
+
+@app.post("/call-logs/{call_log_id}/link")
+async def link_vapi_call(call_log_id: str, body: LinkVapiCall):
+    """Attach the Vapi-generated call id (only known once the browser starts the call)."""
+    call_log = db.set_vapi_call_id(call_log_id, body.vapi_call_id)
+    if not call_log:
+        raise HTTPException(status_code=404, detail="Call log not found")
+    return call_log
+
+
+@app.get("/call-logs/{call_log_id}/result")
+async def get_call_result(call_log_id: str):
+    """Poll after a call ends to get extraction + reflexion once the background job finishes."""
+    call_log = db.get_call_log(call_log_id)
+    if not call_log:
+        raise HTTPException(status_code=404, detail="Call log not found")
+
+    if not call_log.get("transcript"):
+        return {"stage": "in_call"}
+
+    summary = db.get_summary_by_call_log(call_log_id)
+    reflexion = db.get_reflexion_by_call_log(call_log_id)
+    if not summary or not reflexion:
+        return {"stage": "processing", "transcript": call_log["transcript"]}
+
+    return {
+        "stage": "done",
+        "transcript": call_log["transcript"],
+        "summary": summary,
+        "reflexion": reflexion,
     }
 
 

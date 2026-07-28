@@ -189,6 +189,15 @@ class Database:
             row = cur.fetchone()
             return dict(row) if row else None
 
+    def set_vapi_call_id(self, call_log_id: str, vapi_call_id: str) -> dict | None:
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "UPDATE call_logs SET vapi_call_id = %s WHERE id = %s RETURNING *",
+                (vapi_call_id, call_log_id),
+            )
+            row = cur.fetchone()
+            return dict(row) if row else None
+
     def update_call_log_by_id(self, call_log_id: str, transcript: str, status: str) -> dict:
         with self.conn.cursor() as cur:
             cur.execute(
@@ -230,6 +239,15 @@ class Database:
             )
             return str(cur.fetchone()["id"])
 
+    def get_summary_by_call_log(self, call_log_id: str) -> dict | None:
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "SELECT * FROM pre_visit_summaries WHERE call_log_id = %s",
+                (call_log_id,),
+            )
+            row = cur.fetchone()
+            return dict(row) if row else None
+
     # ── Reflexion ─────────────────────────────────────────────────
 
     def save_reflexion(self, call_log_id: str, reflexion: dict) -> str:
@@ -250,6 +268,15 @@ class Database:
                 ),
             )
             return str(cur.fetchone()["id"])
+
+    def get_reflexion_by_call_log(self, call_log_id: str) -> dict | None:
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "SELECT * FROM reflexion_memory WHERE call_log_id = %s",
+                (call_log_id,),
+            )
+            row = cur.fetchone()
+            return dict(row) if row else None
 
     def fetch_recent_reflexions(self, limit: int = 3) -> list:
         with self.conn.cursor() as cur:

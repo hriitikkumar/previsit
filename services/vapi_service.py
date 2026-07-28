@@ -6,6 +6,7 @@ load_dotenv()
 
 VAPI_BASE_URL = "https://api.vapi.ai"
 VAPI_API_KEY = os.environ.get("VAPI_API_KEY", "")
+VAPI_PUBLIC_KEY = os.environ.get("VAPI_PUBLIC_KEY", "")
 VAPI_PHONE_NUMBER_ID = os.environ.get("VAPI_PHONE_NUMBER_ID", "")
 VAPI_WEBHOOK_SECRET = os.environ.get("VAPI_WEBHOOK_SECRET", "")
 WEBHOOK_BASE_URL = os.environ.get("WEBHOOK_BASE_URL", "")  # e.g. https://abc123.ngrok-free.app
@@ -31,7 +32,7 @@ ASSISTANT_CONFIG = {
 }
 
 
-def trigger_call(patient_phone: str, patient_name: str, system_prompt: str) -> dict:
+def _build_assistant_config(patient_name: str, system_prompt: str) -> dict:
     config = {**ASSISTANT_CONFIG}
     config["model"] = {
         **ASSISTANT_CONFIG["model"],
@@ -46,6 +47,12 @@ def trigger_call(patient_phone: str, patient_name: str, system_prompt: str) -> d
         }
         if VAPI_WEBHOOK_SECRET:
             config["server"]["secret"] = VAPI_WEBHOOK_SECRET
+
+    return config
+
+
+def trigger_call(patient_phone: str, patient_name: str, system_prompt: str) -> dict:
+    config = _build_assistant_config(patient_name, system_prompt)
 
     response = requests.post(
         f"{VAPI_BASE_URL}/call",
@@ -64,3 +71,12 @@ def trigger_call(patient_phone: str, patient_name: str, system_prompt: str) -> d
         # Surface Vapi's actual validation error instead of a bare 400
         raise RuntimeError(f"Vapi {response.status_code}: {response.text}")
     return response.json()
+
+
+def build_web_call_config(patient_name: str, system_prompt: str) -> dict:
+    """
+    Assistant config for a browser-based Vapi Web SDK call (WebRTC, no phone
+    number). The frontend passes this straight to `vapi.start(config)` along
+    with the public key.
+    """
+    return _build_assistant_config(patient_name, system_prompt)

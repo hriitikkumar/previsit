@@ -23,14 +23,50 @@ PATIENTS = [
     {
         "name": "Priya Verma",
         "phone": "+91XXXXXXXXXX",
-        "age": 42,
+        "age": 34,
         "language_preference": "hinglish",
         "history": [
             {
                 "visit_date": "2026-04-02",
                 "diagnosis": "IBS - Irritable Bowel Syndrome",
-                "medications": ["Mebeverine 135mg"],
-                "notes": "Stress-related flare ups. Advised dietary changes and stress management.",
+                "medications": ["Mebeverine 135mg", "Fiber supplement"],
+                "notes": "Stress-related flare ups, bloating improving with fiber supplement.",
+            }
+        ],
+        "appointment": {
+            "doctor_name": "Dr. Mehra",
+            "department": "gastroenterology",
+        },
+    },
+    {
+        "name": "Fatima Sheikh",
+        "phone": "+91XXXXXXXXXX",
+        "age": 52,
+        "language_preference": "hinglish",
+        "history": [
+            {
+                "visit_date": "2026-05-10",
+                "diagnosis": "Scheduled for colonoscopy",
+                "medications": [],
+                "notes": "Requires full bowel prep and fasting from midnight before the procedure.",
+            }
+        ],
+        "appointment": {
+            "doctor_name": "Dr. Agarwal",
+            "department": "gastroenterology",
+        },
+    },
+    {
+        "name": "Arjun Nair",
+        "phone": "+91XXXXXXXXXX",
+        "age": 29,
+        "language_preference": "hinglish",
+        "history": [
+            {
+                "visit_date": "2026-06-01",
+                "diagnosis": "Gastritis - routine follow-up",
+                "medications": ["Pantoprazole 40mg"],
+                "notes": "Symptoms resolved, continuing medication as maintenance.",
             }
         ],
         "appointment": {
