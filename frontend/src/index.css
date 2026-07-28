@@ -1,0 +1,38 @@
+body {
+  margin: 0;
+  background: oklch(97% 0.015 85);
+  font-family: 'IBM Plex Sans', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100svh;
+}
+
+h1, h2, p {
+  margin: 0;
+}
+
+a {
+  color: oklch(56% 0.2 276);
+}
+a:hover {
+  color: oklch(48% 0.2 276);
+}
+
+::selection {
+  background: oklch(56% 0.2 276);
+  color: white;
+}
+
+@keyframes wave {
+  0%, 100% { transform: scaleY(0.3); }
+  50% { transform: scaleY(1); }
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
