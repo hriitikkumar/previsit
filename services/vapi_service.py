@@ -20,7 +20,7 @@ ASSISTANT_CONFIG = {
     },
     "voice": {
         "provider": "11labs",
-        "voiceId": "rachel",
+        "voiceId": "21m00Tcm4TlvDq8ikWAM",  # ElevenLabs' "Rachel" voice — must be the actual voice ID, not the name
     },
     "firstMessage": "Hello, am I speaking with {patient_name}? I'm calling from Bhopal Institute of Gastroenterology to confirm your appointment tomorrow.",
     "endCallMessage": "Thank you. See you tomorrow. Please call us if you have any questions.",
