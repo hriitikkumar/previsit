@@ -100,7 +100,7 @@ def create_test_patients(db) -> list[dict]:
         )
 
         db.create_patient_history(patient_id, p["history"][0])
-        index_patient_history(patient_id, p["history"])
+        index_patient_history(db, patient_id, p["history"])
 
         appt_time = tomorrow.replace(hour=10 + i, minute=0, second=0, microsecond=0)
         appointment_id = db.create_appointment(

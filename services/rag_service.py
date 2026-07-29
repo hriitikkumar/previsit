@@ -1,28 +1,9 @@
-import os
-import chromadb
 from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
 
 _openai = OpenAI()
-
-
-def _create_chroma_client():
-    chroma_path = os.environ.get("CHROMA_PATH", "./chroma_db")
-    try:
-        os.makedirs(chroma_path, exist_ok=True)
-        return chromadb.PersistentClient(path=chroma_path)
-    except Exception:
-        # Serverless hosts (e.g. Vercel) may not allow persistent disk writes at
-        # all, even under /tmp. Fall back to an in-memory store so RAG history
-        # degrades to empty rather than crashing the whole app on import — this
-        # does mean history won't survive a cold start on those hosts.
-        return chromadb.EphemeralClient()
-
-
-_chroma = _create_chroma_client()
-_collection = _chroma.get_or_create_collection("patient_history")
 
 
 def _embed(text: str) -> list[float]:
@@ -33,7 +14,13 @@ def _embed(text: str) -> list[float]:
     return response.data[0].embedding
 
 
-def index_patient_history(patient_id: str, history_records: list[dict]):
+def _format_vector(embedding: list[float]) -> str:
+    # pgvector accepts this bracketed text form directly via a ::vector cast —
+    # psycopg2 has no native vector type, so we build the literal ourselves.
+    return "[" + ",".join(str(x) for x in embedding) + "]"
+
+
+def index_patient_history(db, patient_id: str, history_records: list[dict]):
     for record in history_records:
         text = (
             f"Visit: {record['visit_date']}\n"
@@ -41,21 +28,20 @@ def index_patient_history(patient_id: str, history_records: list[dict]):
             f"Medications: {', '.join(record['medications'])}\n"
             f"Notes: {record['notes']}"
         )
-        _collection.upsert(
-            ids=[f"{patient_id}_{record['visit_date']}"],
-            embeddings=[_embed(text)],
-            documents=[text],
-            metadatas=[{"patient_id": str(patient_id)}],
+        db.upsert_patient_history_embedding(
+            patient_id=patient_id,
+            visit_date=record["visit_date"],
+            content=text,
+            embedding=_format_vector(_embed(text)),
         )
 
 
-def get_patient_context(patient_id: str, query: str = "recent visit history medications diagnosis") -> str:
-    results = _collection.query(
-        query_embeddings=[_embed(query)],
-        where={"patient_id": str(patient_id)},
-        n_results=3,
+def get_patient_context(db, patient_id: str, query: str = "recent visit history medications diagnosis") -> str:
+    docs = db.query_patient_history(
+        patient_id=patient_id,
+        query_embedding=_format_vector(_embed(query)),
+        limit=3,
     )
-    docs = results["documents"][0] if results["documents"] else []
     if not docs:
         return "No previous visit history found."
     return "\n\n".join(docs)

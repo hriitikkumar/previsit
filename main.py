@@ -109,7 +109,7 @@ async def trigger_pre_visit_call(appointment_id: str, request: Request):
     patient = db.get_patient(appointment["patient_id"])
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
-    patient_history = get_patient_context(str(patient["id"]))
+    patient_history = get_patient_context(db, str(patient["id"]))
     reflexion_notes = get_reflexion_notes(db, requires_fasting=appointment.get("requires_fasting", False))
 
     system_prompt = build_system_prompt(
@@ -166,7 +166,7 @@ async def start_web_call(appointment_id: str, request: Request):
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
-    patient_history = get_patient_context(str(patient["id"]))
+    patient_history = get_patient_context(db, str(patient["id"]))
     reflexion_notes = get_reflexion_notes(db, requires_fasting=appointment.get("requires_fasting", False))
 
     system_prompt = build_system_prompt(
@@ -310,7 +310,7 @@ async def preview_system_prompt(appointment_id: str):
     patient = db.get_patient(appointment["patient_id"])
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
-    patient_history = get_patient_context(str(patient["id"]))
+    patient_history = get_patient_context(db, str(patient["id"]))
     reflexion_notes = get_reflexion_notes(db, requires_fasting=appointment.get("requires_fasting", False))
 
     prompt = build_system_prompt(

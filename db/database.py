@@ -88,6 +88,25 @@ CREATE TABLE IF NOT EXISTS reflexion_memory (
 ALTER TABLE reflexion_memory ADD COLUMN IF NOT EXISTS approved BOOLEAN DEFAULT TRUE;
 """
 
+# Run separately from CREATE_TABLES: a single multi-statement execute() is one
+# implicit transaction at the Postgres protocol level, so if `vector` isn't
+# installed (e.g. local dev Postgres without the pgvector extension), it would
+# take every other table down with it. Isolated here so RAG history degrades
+# gracefully instead of breaking the whole app when pgvector is unavailable.
+VECTOR_SETUP = """
+CREATE EXTENSION IF NOT EXISTS vector;
+
+CREATE TABLE IF NOT EXISTS patient_history_embeddings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    patient_id UUID REFERENCES patients(id),
+    visit_date DATE,
+    content TEXT NOT NULL,
+    embedding vector(1536) NOT NULL,  -- text-embedding-3-small's dimensionality
+    created_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE (patient_id, visit_date)
+);
+"""
+
 
 class Database:
     def __init__(self):
@@ -96,10 +115,19 @@ class Database:
             cursor_factory=psycopg2.extras.RealDictCursor,
         )
         self.conn.autocommit = True
+        self.vector_available = False
 
     def init_schema(self):
         with self.conn.cursor() as cur:
             cur.execute(CREATE_TABLES)
+
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute(VECTOR_SETUP)
+            self.vector_available = True
+        except Exception as e:
+            self.conn.rollback()
+            print(f"[previsit] pgvector unavailable — RAG patient history will return empty context: {e}")
 
     # ── Patients ──────────────────────────────────────────────────
 
@@ -173,6 +201,33 @@ class Database:
                 (patient_id,),
             )
             return [dict(r) for r in cur.fetchall()]
+
+    # ── RAG patient history embeddings ─────────────────────────────
+
+    def upsert_patient_history_embedding(self, patient_id: str, visit_date, content: str, embedding: str) -> None:
+        if not self.vector_available:
+            return
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO patient_history_embeddings (patient_id, visit_date, content, embedding)
+                   VALUES (%s, %s, %s, %s::vector)
+                   ON CONFLICT (patient_id, visit_date)
+                   DO UPDATE SET content = EXCLUDED.content, embedding = EXCLUDED.embedding""",
+                (patient_id, visit_date, content, embedding),
+            )
+
+    def query_patient_history(self, patient_id: str, query_embedding: str, limit: int = 3) -> list:
+        if not self.vector_available:
+            return []
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """SELECT content FROM patient_history_embeddings
+                   WHERE patient_id = %s
+                   ORDER BY embedding <=> %s::vector
+                   LIMIT %s""",
+                (patient_id, query_embedding, limit),
+            )
+            return [r["content"] for r in cur.fetchall()]
 
     # ── Call logs ─────────────────────────────────────────────────
 

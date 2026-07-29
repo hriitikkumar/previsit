@@ -3,7 +3,6 @@ uvicorn
 openai
 dspy-ai
 instructor
-chromadb
 psycopg2-binary
 pydantic
 requests
