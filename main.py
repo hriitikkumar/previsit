@@ -5,7 +5,7 @@ import os
 import sys
 import time
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -229,7 +229,7 @@ async def get_call_result(call_log_id: str):
 # ── Vapi webhook (real calls) ─────────────────────────────────────────────────
 
 @app.post("/webhook/vapi")
-async def handle_vapi_webhook(request: Request, background_tasks: BackgroundTasks):
+async def handle_vapi_webhook(request: Request):
     _verify_vapi_secret(request.headers.get("x-vapi-secret"))
 
     payload = await request.json()
@@ -247,13 +247,13 @@ async def handle_vapi_webhook(request: Request, background_tasks: BackgroundTask
         status="completed",
     )
 
-    background_tasks.add_task(
-        _process_completed_call,
-        call_log_id=str(call_log["id"]),
-        transcript=transcript,
-    )
+    # Awaited directly rather than fire-and-forget: on serverless hosts (Vercel),
+    # the function instance can be frozen right after the response is sent, so a
+    # background task isn't guaranteed to finish. Blocking here trades a few
+    # seconds of latency for a guarantee the pipeline actually completes.
+    await _process_completed_call(call_log_id=str(call_log["id"]), transcript=transcript)
 
-    return {"status": "processing"}
+    return {"status": "completed"}
 
 
 # ── Mock endpoint — test post-call pipeline without Vapi ─────────────────────
@@ -264,7 +264,7 @@ class MockCallComplete(BaseModel):
 
 
 @app.post("/mock/call-complete")
-async def mock_call_complete(body: MockCallComplete, background_tasks: BackgroundTasks, request: Request):
+async def mock_call_complete(body: MockCallComplete, request: Request):
     """
     Submit a transcript directly and run the full post-call pipeline
     (extraction + reflexion). No Vapi needed — use this for local testing.
@@ -286,16 +286,11 @@ async def mock_call_complete(body: MockCallComplete, background_tasks: Backgroun
         status="mock_completed",
     )
 
-    background_tasks.add_task(
-        _process_completed_call,
-        call_log_id=call_log_id,
-        transcript=body.transcript,
-    )
+    await _process_completed_call(call_log_id=call_log_id, transcript=body.transcript)
 
     return {
-        "status": "processing",
+        "status": "completed",
         "call_log_id": call_log_id,
-        "message": "Extraction and reflexion running in background.",
     }
 
 
