@@ -314,15 +314,20 @@ class Database:
             )
             return [dict(r) for r in cur.fetchall()]
 
-    def fetch_recent_reflexions(self, limit: int = 3) -> list:
+    def fetch_recent_reflexions(self, limit: int = 3, requires_fasting: bool = False) -> list:
+        # Only pull lessons from past calls whose appointment had the same fasting
+        # requirement — a fasting-specific lesson from a colonoscopy prep call is
+        # actively wrong advice for a routine follow-up call, and vice versa.
         with self.conn.cursor() as cur:
             cur.execute(
-                """SELECT key_learning, overall_score
-                   FROM reflexion_memory
-                   WHERE approved = TRUE
-                   ORDER BY created_at DESC
+                """SELECT rm.key_learning, rm.overall_score
+                   FROM reflexion_memory rm
+                   JOIN call_logs cl ON rm.call_log_id = cl.id
+                   JOIN appointments a ON cl.appointment_id = a.id
+                   WHERE rm.approved = TRUE AND a.requires_fasting = %s
+                   ORDER BY rm.created_at DESC
                    LIMIT %s""",
-                (limit,),
+                (requires_fasting, limit),
             )
             return [dict(r) for r in cur.fetchall()]
 

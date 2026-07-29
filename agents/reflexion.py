@@ -31,7 +31,13 @@ Then identify:
 - key_learning: One sentence — the single most important fix, specific enough that it wouldn't apply to a
   different, unrelated call.
 
-Return valid JSON matching this shape exactly:
+IMPORTANT: You will be told whether this specific appointment required fasting or not. Never suggest
+fasting-related advice (in critique, what_to_do_differently, or key_learning) for an appointment that does
+not require fasting — that advice would be actively wrong and confusing if fed into a future call for a
+similarly non-fasting appointment. Only mention fasting if it was actually relevant to this call.
+
+Return valid JSON matching this shape exactly (this is a structural example only — do not reuse its
+specific topic, always base your actual answer on what really happened in the transcript you were given):
 {
   "overall_score": 7,
   "confirmation_score": 8,
@@ -39,14 +45,20 @@ Return valid JSON matching this shape exactly:
   "clarity_score": 7,
   "warmth_score": 9,
   "efficiency_score": 6,
-  "critique": "Overall the call was warm but missed fasting instructions.",
-  "what_went_wrong": "Patient asked about fasting three times...",
-  "what_to_do_differently": "Explain fasting in two clear steps before asking questions...",
-  "key_learning": "State fasting instructions proactively, before the patient has to ask."
+  "critique": "<one sentence tied to a specific moment in THIS transcript>",
+  "what_went_wrong": "<quote the exact transcript line where something broke down>",
+  "what_to_do_differently": "<a concrete change tied to the quote above>",
+  "key_learning": "<one sentence, specific enough that it wouldn't apply to a different, unrelated call>"
 }"""
 
 
-def run_reflexion(transcript: str, pre_visit_summary: dict) -> dict:
+def run_reflexion(transcript: str, pre_visit_summary: dict, requires_fasting: bool = False) -> dict:
+    fasting_context = (
+        "This appointment DOES require fasting/prep instructions."
+        if requires_fasting
+        else "This appointment does NOT require any fasting or prep — do not suggest fasting-related "
+        "advice for this call under any circumstance."
+    )
     response = _client.chat.completions.create(
         model="gpt-4o-mini",
         response_format={"type": "json_object"},
@@ -55,6 +67,7 @@ def run_reflexion(transcript: str, pre_visit_summary: dict) -> dict:
             {
                 "role": "user",
                 "content": (
+                    f"{fasting_context}\n\n"
                     f"TRANSCRIPT:\n{transcript}\n\n"
                     f"WHAT WE COLLECTED:\n{json.dumps(pre_visit_summary, indent=2)}\n\n"
                     "Analyze this call."
@@ -65,8 +78,8 @@ def run_reflexion(transcript: str, pre_visit_summary: dict) -> dict:
     return json.loads(response.choices[0].message.content)
 
 
-def get_reflexion_notes(db, limit: int = 3) -> str:
-    recent = db.fetch_recent_reflexions(limit=limit)
+def get_reflexion_notes(db, requires_fasting: bool = False, limit: int = 3) -> str:
+    recent = db.fetch_recent_reflexions(limit=limit, requires_fasting=requires_fasting)
     if not recent:
         return "No previous call experience yet."
     lines = [f"- {r['key_learning']} (score: {r['overall_score']}/10)" for r in recent]

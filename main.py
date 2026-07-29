@@ -82,7 +82,11 @@ async def _process_completed_call(call_log_id: str, transcript: str):
     summary = extract_summary(transcript)
     db.save_pre_visit_summary(call_log_id, summary)
 
-    reflexion = run_reflexion(transcript, summary.dict())
+    call_log = db.get_call_log(call_log_id)
+    appointment = db.get_appointment(call_log["appointment_id"]) if call_log else None
+    requires_fasting = bool(appointment.get("requires_fasting", False)) if appointment else False
+
+    reflexion = run_reflexion(transcript, summary.dict(), requires_fasting=requires_fasting)
     # Partial/failed calls produce noisy, low-signal self-critiques — don't let
     # them feed into future prompts unless a doctor explicitly approves them.
     auto_approved = summary.call_quality == "complete"
@@ -106,7 +110,7 @@ async def trigger_pre_visit_call(appointment_id: str, request: Request):
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
     patient_history = get_patient_context(str(patient["id"]))
-    reflexion_notes = get_reflexion_notes(db)
+    reflexion_notes = get_reflexion_notes(db, requires_fasting=appointment.get("requires_fasting", False))
 
     system_prompt = build_system_prompt(
         patient_data=patient,
@@ -163,7 +167,7 @@ async def start_web_call(appointment_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Patient not found")
 
     patient_history = get_patient_context(str(patient["id"]))
-    reflexion_notes = get_reflexion_notes(db)
+    reflexion_notes = get_reflexion_notes(db, requires_fasting=appointment.get("requires_fasting", False))
 
     system_prompt = build_system_prompt(
         patient_data=patient,
@@ -307,7 +311,7 @@ async def preview_system_prompt(appointment_id: str):
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
     patient_history = get_patient_context(str(patient["id"]))
-    reflexion_notes = get_reflexion_notes(db)
+    reflexion_notes = get_reflexion_notes(db, requires_fasting=appointment.get("requires_fasting", False))
 
     prompt = build_system_prompt(
         patient_data=patient,

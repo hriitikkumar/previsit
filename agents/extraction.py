@@ -30,7 +30,11 @@ def extract_summary(transcript: str) -> PreVisitSummary:
                 "content": (
                     "Extract structured pre-visit information from this patient call transcript. "
                     "Be conservative — only mark appointment_confirmed=true if the patient explicitly confirmed. "
-                    "Flag anything urgent (chest pain, bleeding, severe symptoms) in urgent_flags. "
+                    "Flag anything urgent (chest pain, chest burning, chest tightness, bleeding, severe symptoms) "
+                    "in urgent_flags — flag it regardless of whether the patient downplays it or calls it minor "
+                    "('not a big deal', 'thoda sa'). Patients routinely minimize chest-area symptoms that turn "
+                    "out to be clinically significant; that judgment call belongs to the doctor, not the patient's "
+                    "own framing. "
                     "call_quality should be 'complete' if all key info was collected, 'partial' if some missing, 'failed' if call didn't work.\n\n"
                     "current_symptoms and current_medications must be short, normalized noun phrases "
                     "(e.g. 'acid reflux', 'Pantoprazole 40mg') — never a raw quote or full sentence from "
