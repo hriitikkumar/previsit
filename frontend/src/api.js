@@ -7,7 +7,13 @@ async function req(path, opts = {}) {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new Error(`${res.status} ${path}: ${body}`);
+    let detail = null;
+    try {
+      detail = JSON.parse(body)?.detail;
+    } catch {
+      // not JSON — leave detail null, fall through to raw error below
+    }
+    throw new Error(detail || `${res.status} ${path}: ${body}`);
   }
   return res.json();
 }

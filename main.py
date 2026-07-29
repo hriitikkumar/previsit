@@ -3,6 +3,7 @@ from __future__ import annotations
 import hmac
 import os
 import sys
+import time
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -44,6 +45,27 @@ async def startup():
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+# In-memory per-IP rate limiting for the money-costing endpoints (real OpenAI +
+# Vapi calls). This is a public demo link with no auth — resets on restart,
+# which is fine for a portfolio demo; would need a shared store behind >1 process.
+_rate_limit_buckets: dict[str, list[float]] = {}
+
+
+def _rate_limit(request: Request, scope: str, max_calls: int, window_seconds: int = 3600):
+    forwarded = request.headers.get("x-forwarded-for", "")
+    ip = forwarded.split(",")[0].strip() or (request.client.host if request.client else "unknown")
+    key = f"{scope}:{ip}"
+    now = time.time()
+    timestamps = _rate_limit_buckets.setdefault(key, [])
+    timestamps[:] = [t for t in timestamps if now - t < window_seconds]
+    if len(timestamps) >= max_calls:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Demo limit reached ({max_calls} per hour) — please try again later.",
+        )
+    timestamps.append(now)
+
+
 def _verify_vapi_secret(secret_header: str | None):
     """
     Vapi echoes the assistant's `server.secret` back as the plaintext
@@ -73,7 +95,9 @@ async def _process_completed_call(call_log_id: str, transcript: str):
 # ── Trigger a real Vapi call ──────────────────────────────────────────────────
 
 @app.post("/call/trigger/{appointment_id}")
-async def trigger_pre_visit_call(appointment_id: str):
+async def trigger_pre_visit_call(appointment_id: str, request: Request):
+    _rate_limit(request, "phone_call", max_calls=1, window_seconds=3600)
+
     appointment = db.get_appointment(appointment_id)
     if not appointment:
         raise HTTPException(status_code=404, detail="Appointment not found")
@@ -116,7 +140,7 @@ async def trigger_pre_visit_call(appointment_id: str):
 # ── Browser-based Vapi Web SDK call (visitor plays the patient) ──────────────
 
 @app.post("/call/web/start/{appointment_id}")
-async def start_web_call(appointment_id: str):
+async def start_web_call(appointment_id: str, request: Request):
     """
     Returns everything the frontend needs to start a live in-browser voice
     call via Vapi's Web SDK: the public key, a fully-built assistant config
@@ -125,6 +149,8 @@ async def start_web_call(appointment_id: str):
     generates the call id client-side, so the frontend must POST it back via
     /call-logs/{call_log_id}/link once the call starts.
     """
+    _rate_limit(request, "web_call", max_calls=3, window_seconds=3600)
+
     if not VAPI_PUBLIC_KEY:
         raise HTTPException(status_code=400, detail="VAPI_PUBLIC_KEY not configured")
 
@@ -238,11 +264,13 @@ class MockCallComplete(BaseModel):
 
 
 @app.post("/mock/call-complete")
-async def mock_call_complete(body: MockCallComplete, background_tasks: BackgroundTasks):
+async def mock_call_complete(body: MockCallComplete, background_tasks: BackgroundTasks, request: Request):
     """
     Submit a transcript directly and run the full post-call pipeline
     (extraction + reflexion). No Vapi needed — use this for local testing.
     """
+    _rate_limit(request, "mock_call", max_calls=5, window_seconds=3600)
+
     appointment = db.get_appointment(body.appointment_id)
     if not appointment:
         raise HTTPException(status_code=404, detail="Appointment not found")
