@@ -27,8 +27,8 @@ ASSISTANT_CONFIG = {
     "endCallMessage": "Thank you. See you tomorrow. Please call us if you have any questions.",
     "transcriber": {
         "provider": "deepgram",
-        "language": "en",
-        "model": "nova-2",
+        "language": "multi",  # code-switching mode — "en" was silently mangling the Hindi half of every sentence
+        "model": "nova-3",  # nova-2 doesn't support "multi"; nova-3 added real-time code-switching
     },
 }
 

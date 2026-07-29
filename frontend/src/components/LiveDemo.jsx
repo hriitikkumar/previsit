@@ -27,6 +27,7 @@ export default function LiveDemo({ onCallCompleted }) {
   const [errorMsg, setErrorMsg] = useState(null);
   const [callStatusByName, setCallStatusByName] = useState({});
   const [micLevel, setMicLevel] = useState(0);
+  const [userIsSpeaking, setUserIsSpeaking] = useState(false);
 
   const vapiRef = useRef(null);
   const pollRef = useRef(null);
@@ -106,6 +107,7 @@ export default function LiveDemo({ onCallCompleted }) {
 
       vapi.on('call-start', () => setStage('calling'));
       vapi.on('volume-level', (level) => setMicLevel(level));
+      vapi.on('local-volume-level', (level) => setUserIsSpeaking(level > 0.05));
       vapi.on('message', (message) => {
         if (message?.type === 'transcript' && message?.transcriptType === 'final') {
           setTranscriptLines((prev) => [
@@ -315,6 +317,32 @@ export default function LiveDemo({ onCallCompleted }) {
               </div>
             ))}
             <div ref={transcriptEndRef} />
+
+            {stage === 'calling' && (
+              <div
+                style={{
+                  alignSelf: 'center',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  fontSize: 11.5,
+                  fontFamily: fonts.mono,
+                  color: userIsSpeaking ? colors.orange : 'oklch(50% 0.02 280)',
+                  marginTop: 4,
+                }}
+              >
+                <div
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: '50%',
+                    background: userIsSpeaking ? colors.orange : 'oklch(50% 0.02 280)',
+                    animation: userIsSpeaking ? 'pulse 0.6s ease-in-out infinite' : 'none',
+                  }}
+                />
+                {userIsSpeaking ? 'Hearing you…' : 'Mic is live — start talking'}
+              </div>
+            )}
 
             {stage === 'calling' && (
               <div style={{ alignSelf: 'center', marginTop: 8 }}>

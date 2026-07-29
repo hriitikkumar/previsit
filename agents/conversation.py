@@ -1,4 +1,6 @@
 import os
+from concurrent.futures import ThreadPoolExecutor
+
 import dspy
 from dotenv import load_dotenv
 
@@ -49,20 +51,29 @@ class PreVisitConversation(dspy.Module):
     def forward(self, patient_name, appointment_time, doctor_name,
                 patient_history, reflexion_notes, procedure_type, patient_age):
 
-        confirmation = self.confirm(
-            patient_name=patient_name,
-            appointment_time=appointment_time,
-            doctor_name=doctor_name,
-        )
-        symptoms = self.collect_symptoms(
-            patient_history=patient_history,
-            reflexion_notes=reflexion_notes,
-        )
-        fasting = self.fasting(
-            procedure_type=procedure_type,
-            patient_age=patient_age,
-            reflexion_notes=reflexion_notes,
-        )
+        # These three sub-calls are independent — running them sequentially
+        # was pure wasted latency (each is its own LLM round-trip).
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            confirmation_future = pool.submit(
+                self.confirm,
+                patient_name=patient_name,
+                appointment_time=appointment_time,
+                doctor_name=doctor_name,
+            )
+            symptoms_future = pool.submit(
+                self.collect_symptoms,
+                patient_history=patient_history,
+                reflexion_notes=reflexion_notes,
+            )
+            fasting_future = pool.submit(
+                self.fasting,
+                procedure_type=procedure_type,
+                patient_age=patient_age,
+                reflexion_notes=reflexion_notes,
+            )
+            confirmation = confirmation_future.result()
+            symptoms = symptoms_future.result()
+            fasting = fasting_future.result()
 
         return dspy.Prediction(
             confirmation_script=confirmation.confirmation_response,
