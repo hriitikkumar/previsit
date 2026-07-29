@@ -6,7 +6,22 @@ from dotenv import load_dotenv
 load_dotenv()
 
 _openai = OpenAI()
-_chroma = chromadb.PersistentClient(path=os.environ.get("CHROMA_PATH", "./chroma_db"))
+
+
+def _create_chroma_client():
+    chroma_path = os.environ.get("CHROMA_PATH", "./chroma_db")
+    try:
+        os.makedirs(chroma_path, exist_ok=True)
+        return chromadb.PersistentClient(path=chroma_path)
+    except Exception:
+        # Serverless hosts (e.g. Vercel) may not allow persistent disk writes at
+        # all, even under /tmp. Fall back to an in-memory store so RAG history
+        # degrades to empty rather than crashing the whole app on import — this
+        # does mean history won't survive a cold start on those hosts.
+        return chromadb.EphemeralClient()
+
+
+_chroma = _create_chroma_client()
 _collection = _chroma.get_or_create_collection("patient_history")
 
 
