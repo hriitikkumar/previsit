@@ -25,3 +25,11 @@ export const linkVapiCall = (callLogId, vapiCallId) =>
     method: 'POST',
     body: JSON.stringify({ vapi_call_id: vapiCallId }),
   });
+
+export const listReflexions = (limit = 20) => req(`/reflexions?limit=${limit}`);
+
+export const setReflexionApproval = (reflexionId, approved) =>
+  req(`/reflexions/${reflexionId}/approval`, {
+    method: 'PATCH',
+    body: JSON.stringify({ approved }),
+  });

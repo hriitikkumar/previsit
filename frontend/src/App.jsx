@@ -5,6 +5,7 @@ import ValueProps from './components/ValueProps';
 import HowItWorks from './components/HowItWorks';
 import LiveDemo from './components/LiveDemo';
 import Dashboard from './components/Dashboard';
+import ReflexionLessons from './components/ReflexionLessons';
 import Footer from './components/Footer';
 import { colors, fonts } from './theme';
 
@@ -19,6 +20,7 @@ export default function App() {
       <HowItWorks />
       <LiveDemo onCallCompleted={() => setRefreshTrigger((n) => n + 1)} />
       <Dashboard refreshTrigger={refreshTrigger} />
+      <ReflexionLessons refreshTrigger={refreshTrigger} />
       <Footer />
     </div>
   );
