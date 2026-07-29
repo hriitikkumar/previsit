@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import Vapi from '@vapi-ai/web';
+import * as VapiModule from '@vapi-ai/web';
 import { colors, fonts } from '../theme';
+
+// The production Rollup build sometimes nests this CJS package's default
+// export one level deeper (VapiModule.default.default) than the dev server
+// does — handle both shapes defensively instead of assuming one.
+const Vapi = VapiModule.default?.default ?? VapiModule.default ?? VapiModule;
 import { DEMO_PERSONAS, personaFor } from '../demoPersonas';
 import { getCallResult, linkVapiCall, listAppointments, startWebCall } from '../api';
 
