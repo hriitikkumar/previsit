@@ -279,7 +279,7 @@ export default function LiveDemo({ onCallCompleted }) {
             )}
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minHeight: 280 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, height: 280, overflowY: 'auto' }}>
             {stage === 'idle' && (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 280, textAlign: 'center' }}>
                 <p style={{ color: 'oklch(65% 0.02 280)', fontSize: 13.5, margin: '0 0 18px', maxWidth: 280 }}>
