@@ -20,15 +20,18 @@ ASSISTANT_CONFIG = {
     },
     "voice": {
         "provider": "11labs",
-        "voiceId": "2F1KINpxsttim2WfMbVs",  # "DB" — Indian Hindi voice, natural for Hinglish delivery
-        "model": "eleven_multilingual_v2",  # higher quality/prosody than flash_v2_5, trades some latency for it
+        "voiceId": "XxQtFmwKGEygx1x7UMJ5",  # "Jeet" — native Hindi voice, regional conversational tone
+        "model": "eleven_multilingual_v2",
     },
-    "firstMessage": "Hello, {patient_name} ji, main Bhopal Institute of Gastroenterology se bol rahi hoon. Kal ki appointment confirm karne ke liye call kiya tha.",
+    "firstMessage": "Hello, {patient_name} ji, main Bhopal Institute of Gastroenterology se bol raha hoon. Kal ki appointment confirm karne ke liye call kiya tha.",
     "endCallMessage": "Theek hai, dhanyavaad. Kal milte hain. Koi bhi sawaal ho toh humein zaroor call kijiye.",
     "transcriber": {
         "provider": "deepgram",
-        "language": "multi",  # code-switching mode — "en" was silently mangling the Hindi half of every sentence
-        "model": "nova-3",  # nova-2 doesn't support "multi"; nova-3 added real-time code-switching
+        # "multi" (code-switch) mode has a confirmed open bug where it misidentifies Hindi as
+        # Spanish (Deepgram staff, github.com/orgs/deepgram/discussions/1208) — no fix available yet.
+        # Hindi-primary mode still tolerates common English loanwords reasonably well.
+        "language": "hi",
+        "model": "nova-3",
         "endpointing": 300,  # default (10ms) is latency-optimized and drops/fragments short utterances — Vapi's own docs recommend 300 for accuracy
         "smartFormat": True,
     },
