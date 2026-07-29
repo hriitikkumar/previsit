@@ -20,8 +20,6 @@ export default function ReflexionLessons({ refreshTrigger }) {
     }
   }
 
-  if (lessons.length === 0) return null;
-
   return (
     <div style={{ background: colors.dashboardBg, padding: '0 48px 100px' }}>
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
@@ -37,6 +35,11 @@ export default function ReflexionLessons({ refreshTrigger }) {
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {lessons.length === 0 && (
+            <div style={{ fontSize: 13.5, color: colors.muted45, padding: '20px 0' }}>
+              No lessons yet — complete a call above to see the agent's first self-critique.
+            </div>
+          )}
           {lessons.map((lesson) => (
             <div
               key={lesson.id}
