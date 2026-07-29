@@ -61,9 +61,12 @@ async def _process_completed_call(call_log_id: str, transcript: str):
     db.save_pre_visit_summary(call_log_id, summary)
 
     reflexion = run_reflexion(transcript, summary.dict())
-    db.save_reflexion(call_log_id, reflexion)
+    # Partial/failed calls produce noisy, low-signal self-critiques — don't let
+    # them feed into future prompts unless a doctor explicitly approves them.
+    auto_approved = summary.call_quality == "complete"
+    db.save_reflexion(call_log_id, reflexion, approved=auto_approved)
 
-    print(f"[previsit] Call {call_log_id} processed — score {reflexion['overall_score']}/10")
+    print(f"[previsit] Call {call_log_id} processed — score {reflexion['overall_score']}/10 (approved={auto_approved})")
     print(f"[previsit] Key learning: {reflexion['key_learning']}")
 
 
@@ -346,6 +349,25 @@ async def get_call_log(call_log_id: str):
     if not call_log:
         raise HTTPException(status_code=404, detail="Call log not found")
     return call_log
+
+
+# ── Reflexion lessons (what feeds future call prompts) ────────────────────────
+
+@app.get("/reflexions")
+async def list_reflexions(limit: int = 20):
+    return db.get_recent_reflexions_detailed(limit=limit)
+
+
+class ReflexionApprovalUpdate(BaseModel):
+    approved: bool
+
+
+@app.patch("/reflexions/{reflexion_id}/approval")
+async def set_reflexion_approval(reflexion_id: str, body: ReflexionApprovalUpdate):
+    reflexion = db.set_reflexion_approved(reflexion_id, body.approved)
+    if not reflexion:
+        raise HTTPException(status_code=404, detail="Reflexion not found")
+    return reflexion
 
 
 # ── Doctor's morning dashboard ────────────────────────────────────────────────

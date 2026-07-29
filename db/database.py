@@ -76,8 +76,11 @@ CREATE TABLE IF NOT EXISTS reflexion_memory (
     what_to_do_differently TEXT,
     key_learning TEXT,
     overall_score INTEGER,
+    approved BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT NOW()
 );
+
+ALTER TABLE reflexion_memory ADD COLUMN IF NOT EXISTS approved BOOLEAN DEFAULT TRUE;
 """
 
 
@@ -250,13 +253,13 @@ class Database:
 
     # ── Reflexion ─────────────────────────────────────────────────
 
-    def save_reflexion(self, call_log_id: str, reflexion: dict) -> str:
+    def save_reflexion(self, call_log_id: str, reflexion: dict, approved: bool = True) -> str:
         with self.conn.cursor() as cur:
             cur.execute(
                 """INSERT INTO reflexion_memory
                    (call_log_id, critique, what_went_wrong, what_to_do_differently,
-                    key_learning, overall_score)
-                   VALUES (%s, %s, %s, %s, %s, %s)
+                    key_learning, overall_score, approved)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s)
                    RETURNING id""",
                 (
                     call_log_id,
@@ -265,6 +268,7 @@ class Database:
                     reflexion.get("what_to_do_differently", ""),
                     reflexion.get("key_learning", ""),
                     reflexion.get("overall_score", 0),
+                    approved,
                 ),
             )
             return str(cur.fetchone()["id"])
@@ -278,11 +282,34 @@ class Database:
             row = cur.fetchone()
             return dict(row) if row else None
 
+    def set_reflexion_approved(self, reflexion_id: str, approved: bool) -> dict | None:
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "UPDATE reflexion_memory SET approved = %s WHERE id = %s RETURNING *",
+                (approved, reflexion_id),
+            )
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+    def get_recent_reflexions_detailed(self, limit: int = 20) -> list:
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """SELECT rm.*, p.name as patient_name
+                   FROM reflexion_memory rm
+                   JOIN call_logs cl ON rm.call_log_id = cl.id
+                   JOIN patients p ON cl.patient_id = p.id
+                   ORDER BY rm.created_at DESC
+                   LIMIT %s""",
+                (limit,),
+            )
+            return [dict(r) for r in cur.fetchall()]
+
     def fetch_recent_reflexions(self, limit: int = 3) -> list:
         with self.conn.cursor() as cur:
             cur.execute(
                 """SELECT key_learning, overall_score
                    FROM reflexion_memory
+                   WHERE approved = TRUE
                    ORDER BY created_at DESC
                    LIMIT %s""",
                 (limit,),
