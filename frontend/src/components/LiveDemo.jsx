@@ -60,7 +60,10 @@ export default function LiveDemo({ onCallCompleted }) {
 
   function beginPolling(callLogId, name) {
     clearInterval(pollRef.current);
+    const maxAttempts = 45; // ~90s — a real call's extraction+reflexion finishes in ~5-10s
+    let attempts = 0;
     pollRef.current = setInterval(async () => {
+      attempts += 1;
       try {
         const res = await getCallResult(callLogId);
         if (res.stage === 'done') {
@@ -70,9 +73,15 @@ export default function LiveDemo({ onCallCompleted }) {
           const urgent = (res.summary?.urgent_flags || []).length > 0;
           setCallStatusByName((prev) => ({ ...prev, [name]: urgent ? 'urgent' : 'confirmed' }));
           onCallCompleted?.();
+          return;
         }
       } catch {
         // transient — keep polling
+      }
+      if (attempts >= maxAttempts) {
+        clearInterval(pollRef.current);
+        setErrorMsg('Timed out waiting for the call to process. The call may not have connected — try again.');
+        setStage('error');
       }
     }, 2000);
   }
