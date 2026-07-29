@@ -20,7 +20,7 @@ ASSISTANT_CONFIG = {
     },
     "voice": {
         "provider": "11labs",
-        "voiceId": "N2al4jd45e882svx17SU",  # "Aakash Aryan" — standard North Indian Hindi, tagged for customer-care calls
+        "voiceId": "JTPrASXyK62cF3L7w8hv",  # "Anil" — calm, realistic Hindi voice, picked after listening in ElevenLabs' own Voice Library
         "model": "eleven_multilingual_v2",
     },
     "firstMessage": "Hello, {patient_name} ji, main Bhopal Institute of Gastroenterology se bol raha hoon. Kal ki appointment confirm karne ke liye call kiya tha.",
