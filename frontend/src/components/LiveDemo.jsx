@@ -31,7 +31,7 @@ export default function LiveDemo({ onCallCompleted }) {
 
   const vapiRef = useRef(null);
   const pollRef = useRef(null);
-  const transcriptEndRef = useRef(null);
+  const transcriptContainerRef = useRef(null);
   const hasErroredRef = useRef(false);
 
   useEffect(() => {
@@ -57,7 +57,10 @@ export default function LiveDemo({ onCallCompleted }) {
   }, []);
 
   useEffect(() => {
-    transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // Scroll only this container's own scrollTop — scrollIntoView scrolls every
+    // scrollable ancestor including the whole page, which was the actual bug.
+    const el = transcriptContainerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [transcriptLines]);
 
   function beginPolling(callLogId, name) {
@@ -279,7 +282,7 @@ export default function LiveDemo({ onCallCompleted }) {
             )}
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, height: 280, overflowY: 'auto' }}>
+          <div ref={transcriptContainerRef} style={{ display: 'flex', flexDirection: 'column', gap: 10, height: 280, overflowY: 'auto' }}>
             {stage === 'idle' && (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 280, textAlign: 'center' }}>
                 <p style={{ color: 'oklch(65% 0.02 280)', fontSize: 13.5, margin: '0 0 18px', maxWidth: 280 }}>
@@ -327,7 +330,6 @@ export default function LiveDemo({ onCallCompleted }) {
                 {line.text}
               </div>
             ))}
-            <div ref={transcriptEndRef} />
 
             {stage === 'calling' && (
               <div

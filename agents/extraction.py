@@ -31,7 +31,12 @@ def extract_summary(transcript: str) -> PreVisitSummary:
                     "Extract structured pre-visit information from this patient call transcript. "
                     "Be conservative — only mark appointment_confirmed=true if the patient explicitly confirmed. "
                     "Flag anything urgent (chest pain, bleeding, severe symptoms) in urgent_flags. "
-                    "call_quality should be 'complete' if all key info was collected, 'partial' if some missing, 'failed' if call didn't work."
+                    "call_quality should be 'complete' if all key info was collected, 'partial' if some missing, 'failed' if call didn't work.\n\n"
+                    "current_symptoms and current_medications must be short, normalized noun phrases "
+                    "(e.g. 'acid reflux', 'Pantoprazole 40mg') — never a raw quote or full sentence from "
+                    "the transcript (e.g. NOT 'I'm fine' or 'the medicine the doctor prescribed last time, "
+                    "still taking it'). If the patient reports no symptoms or you can't identify a specific "
+                    "medication name, use an empty list rather than a vague filler phrase."
                 ),
             },
             {
