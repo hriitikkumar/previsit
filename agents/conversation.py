@@ -58,10 +58,13 @@ class PreVisitConversation(dspy.Module):
         self.fasting = dspy.ChainOfThought(FastingInstructions)
 
     def forward(self, patient_name, appointment_time, doctor_name,
-                patient_history, reflexion_notes, procedure_type, patient_age):
+                patient_history, reflexion_notes, procedure_type, patient_age, requires_fasting):
 
-        # These three sub-calls are independent — running them sequentially
-        # was pure wasted latency (each is its own LLM round-trip).
+        # These sub-calls are independent — running them sequentially was pure
+        # wasted latency (each is its own LLM round-trip). Skip fasting entirely
+        # for a routine consultation — generating (and the model then reciting)
+        # fasting instructions for an appointment that doesn't need them is
+        # exactly what confused a real patient and made the call feel broken.
         with ThreadPoolExecutor(max_workers=3) as pool:
             confirmation_future = pool.submit(
                 self.confirm,
@@ -74,20 +77,24 @@ class PreVisitConversation(dspy.Module):
                 patient_history=patient_history,
                 reflexion_notes=reflexion_notes,
             )
-            fasting_future = pool.submit(
-                self.fasting,
-                procedure_type=procedure_type,
-                patient_age=patient_age,
-                reflexion_notes=reflexion_notes,
+            fasting_future = (
+                pool.submit(
+                    self.fasting,
+                    procedure_type=procedure_type,
+                    patient_age=patient_age,
+                    reflexion_notes=reflexion_notes,
+                )
+                if requires_fasting
+                else None
             )
             confirmation = confirmation_future.result()
             symptoms = symptoms_future.result()
-            fasting = fasting_future.result()
+            fasting = fasting_future.result() if fasting_future else None
 
         return dspy.Prediction(
             confirmation_script=confirmation.confirmation_response,
             symptom_questions=symptoms.symptom_questions,
-            fasting_instructions=fasting.fasting_script,
+            fasting_instructions=fasting.fasting_script if fasting else None,
         )
 
 
@@ -97,17 +104,37 @@ _program = PreVisitConversation()
 def build_system_prompt(patient_data: dict, appointment_data: dict,
                          patient_history: str, reflexion_notes: str) -> str:
 
+    requires_fasting = bool(appointment_data.get("requires_fasting", False))
+
     result = _program(
         patient_name=patient_data["name"],
         appointment_time=str(appointment_data.get("appointment_time", "")),
         doctor_name=appointment_data.get("doctor_name", "the doctor"),
         patient_history=patient_history,
         reflexion_notes=reflexion_notes,
-        procedure_type=appointment_data.get("procedure", "gastroenterology consultation"),
+        procedure_type=appointment_data.get("procedure_type") or "gastroenterology consultation",
         patient_age=str(patient_data.get("age", "unknown")),
+        requires_fasting=requires_fasting,
     )
 
-    return f"""You are a pre-visit agent for Bhopal Institute of Gastroenterology.
+    fasting_section = (
+        f"""
+FASTING INSTRUCTIONS (state proactively, before patient asks):
+{result.fasting_instructions}
+"""
+        if requires_fasting
+        else """
+This is a routine consultation, not a procedure — there are NO fasting instructions to give. If the
+patient asks about fasting or a procedure, tell them clearly that this appointment does not require any
+fasting or prep, and do not mention fasting unprompted.
+"""
+    )
+
+    return f"""You are a pre-visit agent for Bhopal Institute of Gastroenterology. You do not have a
+personal human name — if asked your name, say you're calling on behalf of Bhopal Institute of
+Gastroenterology (PreVisit), never invent a personal name for yourself. You already know the patient's
+name from your greeting — do not ask them for their name again.
+
 You are calling to confirm an appointment and collect pre-visit information.
 Speak in casual, spoken Hinglish the way people actually talk on the phone — not textbook or formal Hindi.
 Mix Hindi and English naturally within the same sentence, the way a real bilingual Indian speaker would.
@@ -132,10 +159,7 @@ APPOINTMENT CONFIRMATION APPROACH:
 
 SYMPTOM COLLECTION APPROACH:
 {result.symptom_questions}
-
-FASTING INSTRUCTIONS (state proactively, before patient asks):
-{result.fasting_instructions}
-
+{fasting_section}
 PATIENT HISTORY CONTEXT:
 {patient_history}
 
@@ -146,7 +170,7 @@ COLLECT THIS INFORMATION:
 1. Appointment confirmed yes/no
 2. Current symptoms
 3. Current medications
-4. Fasting compliance if applicable
+4. Fasting compliance if applicable — only relevant if this appointment requires fasting
 5. Any questions from patient
 6. Any urgent concerns to flag
 

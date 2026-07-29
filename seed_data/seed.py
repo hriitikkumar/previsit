@@ -18,6 +18,8 @@ PATIENTS = [
         "appointment": {
             "doctor_name": "Dr. Agarwal",
             "department": "gastroenterology",
+            "procedure_type": None,
+            "requires_fasting": False,
         },
     },
     {
@@ -36,6 +38,8 @@ PATIENTS = [
         "appointment": {
             "doctor_name": "Dr. Mehra",
             "department": "gastroenterology",
+            "procedure_type": None,
+            "requires_fasting": False,
         },
     },
     {
@@ -54,6 +58,8 @@ PATIENTS = [
         "appointment": {
             "doctor_name": "Dr. Agarwal",
             "department": "gastroenterology",
+            "procedure_type": "colonoscopy",
+            "requires_fasting": True,
         },
     },
     {
@@ -72,6 +78,8 @@ PATIENTS = [
         "appointment": {
             "doctor_name": "Dr. Mehra",
             "department": "gastroenterology",
+            "procedure_type": None,
+            "requires_fasting": False,
         },
     },
 ]
@@ -101,6 +109,8 @@ def create_test_patients(db) -> list[dict]:
                 "doctor_name": p["appointment"]["doctor_name"],
                 "appointment_time": appt_time,
                 "department": p["appointment"]["department"],
+                "procedure_type": p["appointment"].get("procedure_type"),
+                "requires_fasting": p["appointment"].get("requires_fasting", False),
             }
         )
 

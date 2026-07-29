@@ -22,6 +22,8 @@ class AppointmentCreate(BaseModel):
     doctor_name: str
     appointment_time: datetime
     department: str = "gastroenterology"
+    procedure_type: Optional[str] = None
+    requires_fasting: bool = False
 
 
 class Appointment(AppointmentCreate):

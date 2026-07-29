@@ -27,8 +27,13 @@ CREATE TABLE IF NOT EXISTS appointments (
     appointment_time TIMESTAMP,
     department TEXT DEFAULT 'gastroenterology',
     status TEXT DEFAULT 'scheduled',
+    procedure_type TEXT,  -- NULL for a routine consultation, e.g. "colonoscopy" when fasting prep is required
+    requires_fasting BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT NOW()
 );
+
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS procedure_type TEXT;
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS requires_fasting BOOLEAN DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS patient_history (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -123,9 +128,14 @@ class Database:
     def create_appointment(self, data: dict) -> str:
         with self.conn.cursor() as cur:
             cur.execute(
-                """INSERT INTO appointments (patient_id, doctor_name, appointment_time, department)
-                   VALUES (%s, %s, %s, %s) RETURNING id""",
-                (data["patient_id"], data["doctor_name"], data["appointment_time"], data.get("department", "gastroenterology")),
+                """INSERT INTO appointments (patient_id, doctor_name, appointment_time, department, procedure_type, requires_fasting)
+                   VALUES (%s, %s, %s, %s, %s, %s) RETURNING id""",
+                (
+                    data["patient_id"], data["doctor_name"], data["appointment_time"],
+                    data.get("department", "gastroenterology"),
+                    data.get("procedure_type"),
+                    data.get("requires_fasting", False),
+                ),
             )
             return str(cur.fetchone()["id"])
 
