@@ -23,8 +23,8 @@ ASSISTANT_CONFIG = {
         "voiceId": "2F1KINpxsttim2WfMbVs",  # "DB" — Indian Hindi voice, natural for Hinglish delivery
         "model": "eleven_flash_v2_5",  # low-latency multilingual model
     },
-    "firstMessage": "Hello, am I speaking with {patient_name}? I'm calling from Bhopal Institute of Gastroenterology to confirm your appointment tomorrow.",
-    "endCallMessage": "Thank you. See you tomorrow. Please call us if you have any questions.",
+    "firstMessage": "Hello, {patient_name} ji, main Bhopal Institute of Gastroenterology se bol rahi hoon. Kal ki appointment confirm karne ke liye call kiya tha.",
+    "endCallMessage": "Theek hai, dhanyavaad. Kal milte hain. Koi bhi sawaal ho toh humein zaroor call kijiye.",
     "transcriber": {
         "provider": "deepgram",
         "language": "multi",  # code-switching mode — "en" was silently mangling the Hindi half of every sentence

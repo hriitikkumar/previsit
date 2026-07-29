@@ -17,7 +17,8 @@ class AppointmentConfirmation(dspy.Signature):
     appointment_time: str = dspy.InputField(desc="Appointment date and time")
     doctor_name: str = dspy.InputField(desc="Doctor's name")
     confirmation_response: str = dspy.OutputField(
-        desc="Natural Hinglish script to open the call and confirm attendance"
+        desc="Natural Hinglish script to open the call and confirm attendance. "
+        "Write entirely in Roman/English script (e.g. 'aapka naam'), never Devanagari."
     )
 
 
@@ -27,7 +28,8 @@ class SymptomCollection(dspy.Signature):
     patient_history: str = dspy.InputField(desc="Patient's past diagnosis and medications")
     reflexion_notes: str = dspy.InputField(desc="Lessons from previous calls on how to improve")
     symptom_questions: str = dspy.OutputField(
-        desc="Natural, non-clinical questions to gather current symptoms and medication changes"
+        desc="Natural, non-clinical questions to gather current symptoms and medication changes. "
+        "Write entirely in Roman/English script, never Devanagari."
     )
 
 
@@ -38,7 +40,8 @@ class FastingInstructions(dspy.Signature):
     patient_age: str = dspy.InputField(desc="Patient age")
     reflexion_notes: str = dspy.InputField(desc="Past confusion points about fasting to address proactively")
     fasting_script: str = dspy.OutputField(
-        desc="Simple, step-by-step fasting instructions in Hinglish. State proactively, before patient asks."
+        desc="Simple, step-by-step fasting instructions in Hinglish. State proactively, before patient asks. "
+        "Write entirely in Roman/English script, never Devanagari."
     )
 
 
@@ -102,8 +105,9 @@ def build_system_prompt(patient_data: dict, appointment_data: dict,
 You are calling to confirm an appointment and collect pre-visit information.
 Speak in casual, spoken Hinglish the way people actually talk on the phone — not textbook or formal Hindi.
 Mix Hindi and English naturally within the same sentence, the way a real bilingual Indian speaker would
-(e.g. "aapka appointment kal hai, aana bhoolna mat" not stiff, overly formal phrasing). Be warm, patient,
-and clear. Never rush the patient.
+(e.g. "aapka appointment kal hai, aana bhoolna mat" not stiff, overly formal phrasing). Always write Hindi
+words in Roman/English script (like "kaise ho", "theek hai") — never in Devanagari script. Be warm,
+patient, and clear. Never rush the patient.
 
 APPOINTMENT CONFIRMATION APPROACH:
 {result.confirmation_script}

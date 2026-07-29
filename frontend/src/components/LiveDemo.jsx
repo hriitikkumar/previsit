@@ -32,6 +32,7 @@ export default function LiveDemo({ onCallCompleted }) {
   const vapiRef = useRef(null);
   const pollRef = useRef(null);
   const transcriptEndRef = useRef(null);
+  const hasErroredRef = useRef(false);
 
   useEffect(() => {
     listAppointments().then((appointments) => {
@@ -105,22 +106,32 @@ export default function LiveDemo({ onCallCompleted }) {
       const vapi = vapiRef.current;
       vapi.removeAllListeners();
 
+      hasErroredRef.current = false;
+
       vapi.on('call-start', () => setStage('calling'));
       vapi.on('volume-level', (level) => setMicLevel(level));
       vapi.on('local-volume-level', (level) => setUserIsSpeaking(level > 0.05));
       vapi.on('message', (message) => {
         if (message?.type === 'transcript' && message?.transcriptType === 'final') {
-          setTranscriptLines((prev) => [
-            ...prev,
-            { speaker: message.role === 'user' ? 'Patient' : 'PreVisit', text: message.transcript },
-          ]);
+          const speaker = message.role === 'user' ? 'Patient' : 'PreVisit';
+          setTranscriptLines((prev) => {
+            // Deepgram finalizes per-phrase, not per-utterance — merge consecutive
+            // fragments from the same speaker into one bubble instead of a new one each time.
+            const last = prev[prev.length - 1];
+            if (last && last.speaker === speaker) {
+              return [...prev.slice(0, -1), { speaker, text: `${last.text} ${message.transcript}` }];
+            }
+            return [...prev, { speaker, text: message.transcript }];
+          });
         }
       });
       vapi.on('call-end', () => {
-        setStage((s) => (s === 'error' ? s : 'processing'));
+        if (hasErroredRef.current) return; // error handler already ended this attempt — don't also start polling
+        setStage('processing');
         beginPolling(resp.call_log_id, name);
       });
       vapi.on('error', (err) => {
+        hasErroredRef.current = true;
         setErrorMsg(err?.message || err?.errorMsg || 'Call failed — check the console.');
         setStage('error');
       });
