@@ -21,7 +21,7 @@ ASSISTANT_CONFIG = {
     "voice": {
         "provider": "11labs",
         "voiceId": "2F1KINpxsttim2WfMbVs",  # "DB" — Indian Hindi voice, natural for Hinglish delivery
-        "model": "eleven_flash_v2_5",  # low-latency multilingual model
+        "model": "eleven_multilingual_v2",  # higher quality/prosody than flash_v2_5, trades some latency for it
     },
     "firstMessage": "Hello, {patient_name} ji, main Bhopal Institute of Gastroenterology se bol rahi hoon. Kal ki appointment confirm karne ke liye call kiya tha.",
     "endCallMessage": "Theek hai, dhanyavaad. Kal milte hain. Koi bhi sawaal ho toh humein zaroor call kijiye.",
@@ -29,6 +29,8 @@ ASSISTANT_CONFIG = {
         "provider": "deepgram",
         "language": "multi",  # code-switching mode — "en" was silently mangling the Hindi half of every sentence
         "model": "nova-3",  # nova-2 doesn't support "multi"; nova-3 added real-time code-switching
+        "endpointing": 300,  # default (10ms) is latency-optimized and drops/fragments short utterances — Vapi's own docs recommend 300 for accuracy
+        "smartFormat": True,
     },
 }
 
